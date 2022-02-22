@@ -1,0 +1,8 @@
+*.py[co]
+__pycache__/
+
+.vscode/
+*.swp
+
+anim_frames/
+
