@@ -19,9 +19,9 @@ Hi, I'm Theia. Let's talk about JPEG.
 ![bg left:50% 80%](images/do-i-look-like.jpg)
 
 <!--
-JPEG is a ubiquitous image format, and for that attracts a lot of criticism. Much shade has been thrown at JPEG for its weaknesses: compression artifacts, lack of transparency, successive layers of compression destroying an underlying image...
+JPEG is a ubiquitous image format, and for that attracts a lot of criticism. Much shade has been thrown at JPEG for its weaknesses: compression artifacts, lack of transparency, etc...
 
-But despite all that, JPEG survives. Why?
+But despite all that, JPEG is still popular. Why?
 -->
 
 ---
@@ -40,7 +40,7 @@ $ du -h iceberg*
 <!--
 JPEG is a format optimized for human perception. That means, unlike PNG, JPEG isn't (usually) lossless: it's willing to throw away detail it thinks you won't see.
 
-While that algorithm sometimes breaks down -- most notably with text, which we'll talk about later -- when it works, it produces nearly flawless images at a fraction of the size of other image formats.
+While that algorithm sometimes breaks down, when it works, it produces nearly flawless images at a fraction of the size of other image formats.
 
 The core of the JPEG algorithm is also at work in video codecs too, where size is even more important. So if you're interested in the inner workings of, say, H264 or VP9, then JPEG is a great way to introduce yourself to the basic concepts in a simpler environment.
 -->
@@ -53,6 +53,10 @@ The core of the JPEG algorithm is also at work in video codecs too, where size i
 So what are those basic concepts? How does this image format actually work?
 
 Let's explore JPEG by writing a dead-simple decoder. We're not going to try and support every JPEG on the internet, or be fast, or be particularly correct.
+
+We'll cover the segment sequence, lossless compression layers, and finally the grand finale, the lossy compression: the quantized discrete cosine transform.
+
+There will be some code in this talk, so the slides and code will be on Github if you'd like to peruse at a slower pace after the talk. I've also structured this talk in the order a JPEG file is decoded, so you can follow along with the slides if you decide to rewrite it in Rust :-)
 -->
 
 ---
@@ -70,7 +74,7 @@ $ xxd subject.jpg | head -n 5
 ```
 
 <!--
-We're going to focus on this image, which uses a very simple subset of the JPEG format. By the end, we'll be able to decode it and see what it actually is!
+We're going to focus on this JPEG file, which uses a very simple subset of the JPEG format. By the end, we'll be able to decode it and see what it actually is!
 -->
 
 ---
@@ -88,7 +92,7 @@ The first layer of structure in a JPEG file is the segment sequence.
 ![bg 70%](images/segment.drawio.png)
 
 <!--
-A segment is, well, a segment of the file that's prefixed with a 0xFF byte. It's followed by another byte that represents what kind of segment it is -- for example, a start of image segment or comment segment.
+A segment is, well, a segment of the file that's prefixed with a hex FF byte. It's followed by another byte that represents what kind of segment it is -- for example, a start of image segment or comment segment.
 
 Depending on the kind of segment, there may be additional data, in which case the kind byte is followed by a 2-byte length, and then that many bytes of data.
 
@@ -99,11 +103,11 @@ Depending on the kind of segment, there may be additional data, in which case th
 ![bg 50%](images/segment-start-of-image.drawio.png)
 
 <!--
-The first 4 bytes of our file, 0xFF 0xD8, are actually the entirety of the first segment. 0xD8 is the kind byte for "Start of Image", a segment with no data that represents the start of
+The first 4 bytes of our file, hex FF D8, are actually the entirety of the first segment. hex D8 is the kind byte for "Start of Image", a segment with no data that represents the start of
 the file.
 
 When `stat` or a file manager auto-detects a JPEG file, they look for the magic number
-ff d8 ff -- the start of image segment, plus the marker byte of the next segment.
+hex FF D8 FF -- the start of image segment, plus the marker byte of the next segment.
 -->
 
 ---
@@ -111,7 +115,7 @@ ff d8 ff -- the start of image segment, plus the marker byte of the next segment
 ![bg 80%](images/segment-comment.drawio.png)
 
 <!--
-Here's a segment with some more data, a comment segment. This was inserted by my image editing program, GIMP. It holds arbitrary ASCII text, uncompressed since it's expected to be short.
+Here's a segment with some more data, a comment segment. This was inserted by my image editing program, GIMP. It holds arbitrary ASCII text, which is uncompressed since it's expected to be short.
 -->
 
 ---
@@ -119,7 +123,9 @@ Here's a segment with some more data, a comment segment. This was inserted by my
 ![bg 80%](images/segment-sos.drawio.png)
 
 <!--
-Finally, here's the weird one, Start of Scan. This segment holds compressed data, so the length field is only the uncompressed header prefix. We'll need to scan through the data following this segment looking for 0xFF bytes. If a 0xFF byte is followed by a 0x00 byte, it's an escaped 0xFF byte and that pair should be interpreted as a single 0xFF. Otherwise, it's the start of a new segment.
+Finally, here's the weird one, Start of Scan. This segment holds compressed data, so the length field is only the uncompressed header prefix.
+
+We'll need to scan through the data following this segment looking for hex FF bytes. If that byte is followed by a 0 byte, it's an escaped hex FF byte and that pair should be interpreted as a single hex FF. Otherwise, it's the start of a new segment, and we break out of the scan loop.
 -->
 
 ---
@@ -153,7 +159,7 @@ class Segment:
 ```
 
 <!--
-Now we know enough about segments to define a data type for them, We'll map the kind byte to an easier-to-grok str...
+Now we know enough about segments to define a data type for them, We'll map the kind byte to an easier-to-grok string...
 -->
 
 ---
@@ -191,9 +197,7 @@ def read_segment(data: bytes) -> tuple[Segment, bytes]:
 ```
 
 <!--
-Now we can write a function that parses a single segment from the file.
-
-(Don't worry about following all the code right now -- slides will be available online)
+Now we can write a function that parses a single segment from the file. We parse the marker and kind byte, and can immediately return a no-data segment if the kind byte is in a certain range. Otherwise, we need to read a length and payload, and if the segment is a StartOfScan segment, scan through to append the compressed data block as well.
 -->
 
 ---
@@ -217,7 +221,7 @@ image_segments = read_all_segments(image_data)
 ```
 
 <!--
-And finally, we can call that function repeatedly in a loop, reading all the segments and putting them into a dictionary based on their kind str.
+And finally, we can call that function repeatedly in a loop, reading all the segments and putting them into a dictionary based on their kind string.
 -->
 
 ---
@@ -240,7 +244,7 @@ And finally, we can call that function repeatedly in a loop, reading all the seg
 <!--
 Now that we've parsed the image, we can see the structure more clearly.
 
-We have a Start Of Image segment, an app-specific JFIF segment we can ignore, the "Created with GIMP" comment, two quantization table definitions we'll cover later with the Discrete Cosine Transform, a Start of Frame segment that holds the image metadata like width and height, four Huffman table definitions we'll use to decompress the image data in a moment, the image data in the Start of Scan segment, and finally the End of Image segment.
+We have a Start Of Image segment, an app-specific JFIF segment we can ignore, the "Created with GIMP" comment, two quantization table definitions we'll cover later with the Discrete Cosine Transform, a Start of Frame segment that holds the image metadata like width and height, four Huffman table definitions we'll use in a moment, the image data in the Start of Scan segment, and finally the End of Image segment.
 -->
 
 ---
@@ -248,8 +252,10 @@ We have a Start Of Image segment, an app-specific JFIF segment we can ignore, th
 # Layer 2: Huffman Tables and Run-Length Encoding
 
 <!--
+Now that we've parsed the segment sequence, we can start on the lossless compression.
+
 JPEGs store the compressed image data in a series of 8x8 sub-blocks.
-Each sub-block has several layers of lossless compression on top of the lossy perceptual compression.
+Each sub-block has a a layer of lossless compression on top of the lossy perceptual compression.
 
 Let's quickly go through these lossless compression techniques, starting with Huffman coding.
 -->
@@ -464,7 +470,7 @@ blocks = read_subblocks(subblock_data, image_metadata)
 ```
 
 <!--
-To read all the sub-blocks, we just keep reading them in order from the bitstream until its exhausted.
+To read all the sub-blocks, we just keep reading them in order from the bitstream until its exhausted. The components have their sub-blocks interleaved, but maintain their own `prev_dc` value, since the DC, which represents the intensity of a sub-block as we'll see later, varies largely *between* components but relatively little locally within a single component.
 
 For some reason, the blocks are written into the bitstream out of their component order -- it goes 1-3-2 -- I'm not sure why. That lost me some debugging time :-)
 -->
@@ -502,7 +508,7 @@ The discrete cosine transform is a way of representing an image in terms of a se
 
 This image represents the 64 basis functions used for an 8x8 JPEG sub-block. They start out in the upper left as very low-frequency and low-detail, and increase in frequency and detail as you head towards the bottom right.
 
-An image represented via a DCT is simply an 8x8 matrix of coeffecients that represent how strong each of the basis functions are in the image. Let's see what that looks like.
+An image represented via a DCT is simply an 8x8 matrix of coefficients that represent how strong each of the basis functions are in the image. Let's see what that looks like.
 
 -->
 
@@ -513,7 +519,9 @@ An image represented via a DCT is simply an 8x8 matrix of coeffecients that repr
 <!--
 Here's an example I put together of incrementally adding basis functions to construct an image. On the left is the basis function most recently added, and the right is the accumulated image. Notice how it starts out as a formless blob, and by the end, once all 64 basis functions have been accumulated into the image, it's a lossless, 1:1 copy of the original.
 
-You might be wondering what the point of this is -- we've taken 64 bytes of image data and turned it into 64 bytes of DCT coefficients. Why bother?
+Note that the first basis function, which is in the upper-left of the 8x8 grid, is pure white. This is the DC we were talking about in the previous section. The DC coefficient sets the intensity of the entire sub-block -- a high DC coefficient results in a bright sub-block, and vice-versa for a low sub-block. That's why the DC coefficient is treated specially, since it tends to vary in a different way from the other AC coefficients. These names come by analogy from DC and AC current, since DC current is constant, and AC current varies sinusoidally.
+
+You might be wondering what the point of all this is -- we've taken 64 bytes of image data and turned it into 64 bytes of DCT coefficients. Why bother?
 -->
 
 ---
@@ -523,9 +531,9 @@ You might be wondering what the point of this is -- we've taken 64 bytes of imag
 <!--
 The reason is *Quantization*. This is where JPEG's optimization for human perception comes in. Humans are, generally speaking, bad at seeing high-frequency data. Looking a photo of a person, we can't really tell without squinting whether each hair on their head is in the image, or if their hair is a general blur of hair-color. JPEG takes advantage of this.
 
-In the image above, I've extremely skillfully drawn a zig-zag on top of the DCT basis functions. It starts in the upper-left, at the lowest-frequency basis function, and snakes over to the bottom right.
+In the image above, I've extremely skillfully drawn a zig-zag on top of the DCT basis functions. It starts in the upper-left, at the DC basis function, and snakes over to the bottom right.
 
-When an image is encoded, a quantization table is used to divide each coefficient. Since the coefficients are represented as integers, if a coefficient is smaller than the quantization factor, it will become a zero. The sub-block is then rearranged according to this zig-zag pattern -- for example:
+When an image is encoded, a quantization table is used to divide each coefficient. Since the coefficients are represented as integers, if a coefficient is smaller than the quantization factor, it will become a zero. The sub-block is then rearranged according to this zig-zag pattern -- for example,
 -->
 
 ---
@@ -533,9 +541,9 @@ When an image is encoded, a quantization table is used to divide each coefficien
 ![bg contain](images/DCT-8x8-zigzag-hl.png)
 
 <!--
-, this coefficient is the third value in the encoded sub-block, not the 9th.
+, this coefficient highlighted in green is the third value in the encoded sub-block, not the 9th.
 
-Since the quantization factors are higher for higher-frequency basis functions, and the zig-zag pattern rearranges those high-frequency basis functions at the end of the sub-block, this leads to sub-blocks with a lot of trailing zeroes -- perfect for the run-length encoding we talked about earlier.
+Since the quantization factors are higher for higher-frequency basis functions, and the zig-zag pattern rearranges those high-frequency basis functions at the end of the sub-block, this leads to sub-blocks with a lot of trailing zeroes -- perfect for the run-length encoding we talked about earlier, which can collapse an arbitrarily-long trailing run of zeros into a single bit.
 -->
 
 ---
@@ -582,7 +590,11 @@ def dequantize_subblocks(
 dequantized_blocks = dequantize_subblocks(blocks, image_metadata)
 ```
 
-<!-- And then we can unzigzag our sub-blocks with numpy's indexing magic, and de-quantize them with an element-wise multiplication with the quantization table for this component. -->
+<!--
+And then we can unzigzag our sub-blocks with numpy's indexing magic, and dequantize them with an element-wise multiplication with the quantization table for this component.
+
+We then loop through the block tuples we processed earlier, and dequantize each set of 3 blocks, 1 per component.
+-->
 
 ---
 
@@ -600,7 +612,9 @@ def idct_subblock(subblock: np.ndarray) -> np.ndarray:
     return ((DCT.T @ subblock.T @ DCT) + 128).round().clip(0, 255).astype(int)
 ```
 
-<!-- Now we can inverse-DCT the de-quantized subblocks. We define the DCT matrix -- I won't go over the math here, but it's basically just a bunch of cosine functions -- and we dot the sub-block with the DCT transpose and the DCT, and offset it from -128 through 128 to 0 through 255. The quantization process can lead to values out of the expected range, so we clip them, as well. -->
+<!--
+Now we can inverse-DCT the dequantized sub-blocks. We define the DCT matrix -- I won't go over the math here, but it's basically just a bunch of cosine functions -- and we dot the sub-block with the DCT transpose and the DCT, and offset it from -128 through 128 to 0 through 255. The quantization process can lead to values out of the expected range, so we clip them, as well.
+-->
 
 ---
 
@@ -608,6 +622,8 @@ def idct_subblock(subblock: np.ndarray) -> np.ndarray:
 
 <!--
 Finally, we need to convert from JPEG color space to RGB. JPEG uses YCrCb, which is luminance, Y, red, Cr, and blue, Cb -- green is inferred from the other components.
+
+JPEG uses this color mode for a few reasons, but a major one is compression, as you may expect. JPEG images can more highly compress the color channels than the luminance ones, because humans are less perceptive to changes in color than we are to changes in luminance.
 -->
 
 ---
@@ -631,18 +647,28 @@ for luma, chcr, chcb in dequantized_blocks:
 ```
 
 <!--
-Converting uses some magic constants.
+Converting between the color spaces uses some magic constants, defined in the JFIF companion standard.
 
 Offscreen I wrote some code to combine these RGB blocks into a PIL image, but that's not very interesting so I won't show it here.
 
-Finally, we can `image.show()` our image!
+Finally, we can see our image!
 -->
 
 ---
 
-![bg contain](subject.png)
-<!-- ![right:50%](anim.gif) -->
+```python
+image.show()
+```
+
+![](subject.png)
 
 <!--
-Thanks for listening to my talk! The code will be available on Github if you'd like to peruse it at a slower pace.
+Thanks for listening to my talk!
 -->
+
+---
+
+# https://github.com/vgel/jpeg-decode-talk
+![](images/anim.gif)
+
+<!-- Here's a link to the code and slides, as well as a bonus animation showing the effect of adding more DCT coefficients to a larger image. -->
