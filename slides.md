@@ -458,6 +458,7 @@ def read_subblocks(
     return blocks
 
 
+image_start_of_scan_segment = image_segments["StartOfScan"][0]
 subblock_data = image_start_of_scan_segment.data[image_start_of_scan_segment.length :]
 blocks = read_subblocks(subblock_data, image_metadata)
 ```
