@@ -15,6 +15,7 @@ with open(sys.argv[1], "rb") as f:
 
 # Segment definitions
 
+
 @dataclass
 class Segment:
     # these aren't all the kinds, just the ones we care about
@@ -92,6 +93,7 @@ def read_all_segments(data: bytes) -> dict[str, list[Segment]]:
 image_segments = read_all_segments(image_data)
 
 # Parse StartOfFrame
+
 
 @dataclass
 class Component:
@@ -233,6 +235,7 @@ print()
 
 # Parse StartOfScan
 
+
 @dataclass
 class ComponentInfo:
     id: int
@@ -294,6 +297,7 @@ print()
 
 # Define a ImageMetadata structure to hold all the metadata we've parsed out
 
+
 @dataclass
 class ComponentMetadata:
     id: int
@@ -336,6 +340,7 @@ image_metadata = ImageMetadata(
 )
 
 # Bitstream decompression
+
 
 @dataclass
 class Bitstream:
@@ -489,7 +494,9 @@ DCT = np.array([[f_dct(row, col) for col in range(8)] for row in range(8)])
 def idct_subblock(subblock: np.ndarray) -> np.ndarray:
     return ((DCT.T @ subblock.T @ DCT) + 128).round().clip(0, 255).astype(int)
 
+
 # Color space conversion
+
 
 def convert_rgb_subblocks(
     dequantized_blocks: list[tuple[np.ndarray, np.ndarray, np.ndarray]]
@@ -515,6 +522,7 @@ def convert_rgb_subblocks(
 rgb_blocks = convert_rgb_subblocks(dequantized_blocks)
 
 # Tile blocks into a single PIL image
+
 
 def make_image(
     rgb_blocks: list[tuple[np.ndarray, np.ndarray, np.ndarray]]
