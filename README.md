@@ -13,3 +13,10 @@ The only external dependencies required are `numpy` and `Pillow`.
 `python3.10 decode.py subject.jpg output.png` will write the PIL image to a PNG file.
 
 Note: random JPG files you find on the internet probably won't work with this decoder. The feature set is very small, and it still has a lot of bugs. It's talk-ware, for sure :)
+
+
+## Output generation
+
+```
+$ npx @marp-team/marp-cli@latest slides.md
+```
